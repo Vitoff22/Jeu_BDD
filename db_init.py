@@ -1,17 +1,10 @@
-from pymongo import MongoClient
+from pymongo.errors import PyMongoError
 
-client = MongoClient("mongodb://localhost:27017/")
+from database import create_client, database_name
 
-db = client["jeu_video"]
-characters = db["characters"]
-monsters = db["monsters"]
-user = db["user"]
 
-def main():
-    client = MongoClient("mongodb://localhost:27017/")
-    db = client["jeu_video"]
-    
-    
+def seed_database(db):
+    """Add missing reference data without deleting or replacing saved data."""
     characters = [
         {"name": "Guerrier",  "atk": 15, "def": 10, "hp": 100},
         {"name": "Mage",      "atk": 20, "def": 5,  "hp": 80},
@@ -38,12 +31,22 @@ def main():
         {"name": "Squelette",  "atk": 15, "def": 7,  "hp": 90},
     ]
 
-    # on vide les collections avant d'insérer les données
-    db.characters.delete_many({})
-    db.monsters.delete_many({})
-    db.user.delete_many({})
-    db.characters.insert_many(characters)
-    db.monsters.insert_many(monsters)
+    # Only insert missing reference entries. Existing stats and user scores stay intact.
+    # Run initialization once at a time, before starting the local CLI game.
+    for collection, documents in (("characters", characters), ("monsters", monsters)):
+        for document in documents:
+            db[collection].update_one(
+                {"name": document["name"]}, {"$setOnInsert": document}, upsert=True
+            )
+
+
+def main():
+    with create_client() as client:
+        seed_database(client[database_name()])
+    print("Personnages et monstres initialisés. Les scores existants sont conservés.")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except PyMongoError:
+        raise SystemExit("Initialisation impossible. Vérifiez MongoDB et MONGODB_URI. Aucune réinitialisation des scores n'a été demandée.") from None

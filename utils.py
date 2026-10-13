@@ -1,16 +1,19 @@
 
-from pymongo import MongoClient
 import models, random
-client = MongoClient("mongodb://localhost:27017/")
+from database import create_client, database_name
+client = create_client()
 
-db = client["jeu_video"]
+db = client[database_name()]
 
 def ajout_utilisateur(name):
-    db["user"].insert_one({"name" : name, "score" : []})
+    # Replaying under the same name must not create a second empty score record.
+    db["user"].update_one(
+        {"name": name}, {"$setOnInsert": {"name": name, "score": []}}, upsert=True
+    )
 
 def afficher_choix():
     for characters in list(db["characters"].find()):
-        print(f"{characters["name"]} : {characters["atk"]} ATK -- {characters["def"]} DEF -- {characters["hp"]} PV")
+        print(f"{characters['name']} : {characters['atk']} ATK -- {characters['def']} DEF -- {characters['hp']} PV")
 
 def personnage_dans_liste(personnages):
     for personnage in list(db["characters"].find()):
@@ -32,18 +35,11 @@ def monstre_choix():
     return equipe_monstre
 
 def enregistrer_score(creer_utilisateur, manche):
-    #liste des scores du joueur
-    score_joueur = nouveau_score(creer_utilisateur, manche)
-    #mettre a jour le score du joueur dans la base de donnee
-    db["user"].update_one({"name" : creer_utilisateur}, {"$set" : {"score" : score_joueur}})
-
-def nouveau_score(creer_utilisateur, manche):
-    #recuperer les scores du joueur
-    scores = list(db["user"].find({"name" : creer_utilisateur}))[0]["score"]
-    #ajouter le nouveau score a la liste des scores
-    scores.append(manche)
-    #donner le score par ordre decroissant
-    return sorted(scores, reverse=True)
+    # Atomic append: do not overwrite a score saved between a read and a write.
+    db["user"].update_one(
+        {"name": creer_utilisateur},
+        {"$push": {"score": {"$each": [manche], "$sort": -1}}},
+    )
 
 def nouveau(creer_utilisateur):
     #recuperer les scores du joueur

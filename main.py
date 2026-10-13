@@ -1,4 +1,5 @@
 import utils,models,game
+from pymongo.errors import PyMongoError
 
 def main():
 
@@ -91,4 +92,10 @@ def rejouer():
         if reponse in ['O', 'N']:
             return reponse == 'O'
 
-main()
+if __name__ == "__main__":
+    try:
+        main()
+    except PyMongoError:
+        raise SystemExit("Connexion à MongoDB impossible. Vérifiez le service et MONGODB_URI.") from None
+    finally:
+        utils.client.close()
